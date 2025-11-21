@@ -1,0 +1,84 @@
+---
+- name: "Deploying Securesign CR from template: {{ template_to_deploy }}"
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', template_to_deploy) }}"
+
+- name: "Display TAS deployment status"
+  ansible.builtin.debug:
+    msg:
+      - "TAS Securesign deployment initiated"
+      - "Instance: {{ baseline.instance_name }}"
+      - "Namespace: {{ baseline_namespace }}"
+
+- name: "Check all TAS components for readiness"
+  kubernetes.core.k8s_info:
+    api_version: rhtas.redhat.com/v1alpha1
+    kind: "{{ item }}"
+    name: "{{ baseline.instance_name }}"
+    namespace: "{{ baseline_namespace }}"
+  register: component_status
+  retries: 30
+  delay: 10
+  until: >
+    component_status.resources | length > 0 and
+    (component_status.resources[0].status.conditions |
+     selectattr('type', 'equalto', 'Ready') |
+     selectattr('status', 'equalto', 'True') | list | length > 0)
+  loop:
+    - Trillian
+    - Fulcio
+    - Rekor
+    - CTlog
+    - TimestampAuthority
+    - Tuf
+    - Securesign
+  loop_control:
+    label: "Waiting for {{ item }}"
+
+
+- name: "Apply resource requests to the Trillian DB Deployment"
+  kubernetes.core.k8s_json_patch:
+    kind: Deployment
+    name: "trillian-db"
+    namespace: "{{ baseline_namespace }}"
+    patch:
+      - op: add
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: "{{ resources.trillian_database.requests.cpu }}"
+            memory: "{{ resources.trillian_database.requests.memory }}"
+          limits:
+            cpu: "{{ resources.trillian_database.limits.cpu }}"
+            memory: "{{ resources.trillian_database.limits.memory }}"
+
+
+- name: "Apply affinity to the Trillian DB Deployment"
+  kubernetes.core.k8s_json_patch:
+    kind: Deployment
+    name: "trillian-db"
+    namespace: "{{ baseline_namespace }}"
+    patch:
+      - op: add
+        path: /spec/template/spec/affinity
+        value:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+              - matchExpressions:
+                - key: performance-zone
+                  operator: In
+                  values:
+                  - "database"
+  when: template_to_deploy == "securesign-cr-optimized.yml.j2"
+            
+- name: "Verify ServiceMonitors are created"
+  kubernetes.core.k8s_info:
+    api_version: monitoring.coreos.com/v1
+    kind: ServiceMonitor
+    namespace: "{{ baseline_namespace }}"
+  register: service_monitors
+  retries: 5
+  delay: 30
+  until: service_monitors.resources | length >= 6  # Expect at least 6 ServiceMonitors

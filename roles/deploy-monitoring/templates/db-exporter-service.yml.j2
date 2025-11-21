@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: trillian-db-exporter-metrics
+  namespace: "{{ baseline_namespace }}"
+  labels:
+    app: trillian-db-exporter
+spec:
+  ports:
+  - name: metrics
+    port: 9104
+    targetPort: metrics
+  selector:
+    app: trillian-db-exporter

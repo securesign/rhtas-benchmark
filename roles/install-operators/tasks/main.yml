@@ -1,0 +1,86 @@
+# Install RHTAS and Grafana operators
+---
+- name: Build Kustomize output for Keycloak Operator
+  ansible.builtin.command: "oc kustomize {{ path_to_k8s_configs }}/keycloak/operator/base/"
+  register: kustomize_operator_output
+  changed_when: false
+
+- name: Install Keycloak Operator from Kustomize output
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ kustomize_operator_output.stdout }}"
+
+- name: "Wait for Keycloak Operator to be ready"
+  kubernetes.core.k8s_info:
+    api_version: operators.coreos.com/v1alpha1
+    kind: ClusterServiceVersion
+    namespace: "keycloak-system"
+    label_selectors:
+      - "operators.coreos.com/rhsso-operator.keycloak-system"
+  register: keycloak_csv_status
+  retries: 30
+  delay: 10
+  until: >
+    keycloak_csv_status.resources | length > 0 and
+    keycloak_csv_status.resources[0].status is defined and
+    keycloak_csv_status.resources[0].status.phase == "Succeeded"
+
+- name: "Install RHTAS Operator"
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: operators.coreos.com/v1alpha1
+      kind: Subscription
+      metadata:
+        name: "{{ operators.rhtas.name }}"
+        namespace: "{{ operators.rhtas.namespace }}"
+      spec:
+        channel: "{{ operators.rhtas.channel }}"
+        installPlanApproval: Automatic
+        name: "{{ operators.rhtas.name }}"
+        source: "{{ operators.rhtas.source }}"
+        sourceNamespace: "{{ operators.rhtas.sourceNamespace }}"
+
+- name: "Wait for RHTAS Operator to be ready"
+  kubernetes.core.k8s_info:
+    api_version: operators.coreos.com/v1alpha1
+    kind: ClusterServiceVersion
+    namespace: "{{ operators.rhtas.namespace }}"
+    label_selectors:
+      - "operators.coreos.com/rhtas-operator.openshift-operators"
+  register: rhtas_csv_status
+  retries: 30
+  delay: 10
+  until: >
+    rhtas_csv_status.resources | length > 0 and
+    rhtas_csv_status.resources[0].status is defined and
+    rhtas_csv_status.resources[0].status.phase == "Succeeded"
+
+- name: "Install Grafana Operator"
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: operators.coreos.com/v1alpha1
+      kind: Subscription
+      metadata:
+        name: "{{ operators.grafana.name }}"
+        namespace: "{{ operators.grafana.namespace }}"
+      spec:
+        channel: "{{ operators.grafana.channel }}"
+        installPlanApproval: Automatic
+        name: "{{ operators.grafana.name }}"
+        source: "{{ operators.grafana.source }}"
+        sourceNamespace: "{{ operators.grafana.sourceNamespace }}"
+
+- name: "Wait for Grafana Operator to be ready"
+  kubernetes.core.k8s_info:
+    api_version: operators.coreos.com/v1alpha1
+    kind: ClusterServiceVersion
+    namespace: "{{ operators.grafana.namespace }}"
+    label_selectors:
+      - "operators.coreos.com/grafana-operator.openshift-operators"
+  register: grafana_csv_status
+  retries: 30
+  delay: 10
+  until: >
+    grafana_csv_status.resources | length > 0 and
+    grafana_csv_status.resources[0].status is defined and
+    grafana_csv_status.resources[0].status.phase == "Succeeded"

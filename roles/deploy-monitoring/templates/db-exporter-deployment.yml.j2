@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trillian-db-exporter
+  namespace: "{{ baseline_namespace }}"
+  labels:
+    app: trillian-db-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trillian-db-exporter
+  template:
+    metadata:
+      labels:
+        app: trillian-db-exporter
+    spec:
+      initContainers:
+      - name: config-preparer
+        image: registry.access.redhat.com/ubi8/ubi-minimal:latest
+        command:
+          - /bin/sh
+          - -c
+          - |
+            echo "Preparing my.cnf file with current credentials..."
+            echo "[client]" > /config/my.cnf
+            echo "user = ${DB_USER}" >> /config/my.cnf
+            echo "password = ${DB_PASSWORD}" >> /config/my.cnf
+            echo "host = trillian-mysql.{{ baseline_namespace }}.svc.cluster.local" >> /config/my.cnf
+            echo "port = 3306" >> /config/my.cnf
+            echo "my.cnf file created successfully."
+        env:
+          - name: DB_USER
+            valueFrom:
+              secretKeyRef:
+                name: "{{ db_secret_name }}"
+                key: mysql-user
+          - name: DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: "{{ db_secret_name }}"
+                key: mysql-password
+        volumeMounts:
+        - name: mysql-exporter-config
+          mountPath: /config
+
+      containers:
+      - name: mysql-exporter
+        image: quay.io/rh_ee_kdacosta/mysqld-exporter:fixed-3
+        command:
+          - "/bin/sh"
+          - "-c"
+          - |
+            echo "Config file should be present. Starting exporter."
+            /bin/mysqld_exporter \
+              --config.my-cnf=/etc/mysql-exporter/my.cnf \
+              --no-collect.info_schema.innodb_cmp \
+              --no-collect.info_schema.innodb_cmpmem \
+              --no-collect.slave_status \
+              --no-collect.global_variables
+        ports:
+        - name: metrics
+          containerPort: 9104
+        volumeMounts:
+        - name: mysql-exporter-config
+          mountPath: "/etc/mysql-exporter"
+          readOnly: true
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          seccompProfile:
+            type: RuntimeDefault
+            
+      volumes:
+      - name: mysql-exporter-config
+        emptyDir: {}

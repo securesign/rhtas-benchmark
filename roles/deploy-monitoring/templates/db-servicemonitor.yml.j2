@@ -1,0 +1,15 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: trillian-db-monitor
+  namespace: "{{ baseline_namespace }}"
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: trillian-db-exporter
+  endpoints:
+  - port: metrics
+    interval: 30s
+    scheme: http
