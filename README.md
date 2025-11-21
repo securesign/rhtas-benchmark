@@ -70,6 +70,16 @@ make clean
 
 These are hardcoded for test environment compatibility.
 
+### Custom Container Images
+
+This repository uses custom container images that are specifically configured for this project:
+
+- **`quay.io/rh_ee_kdacosta/go-crypto-helper`** - Custom helper for cryptographic operations used in K6 performance tests
+- **`quay.io/rh_ee_kdacosta/k6`** - Custom K6 image with Prometheus pushgateway support
+- **`quay.io/rh_ee_kdacosta/mysqld-exporter`** - Custom MySQL exporter with fixes for special characters (`#`, `$`) in passwords that would otherwise break password parsing
+
+These images are required for the infrastructure to function correctly and should not be replaced with standard images.
+
 ## Monitoring
 
 The deployed infrastructure includes a Grafana instance with a custom dashboard for real-time performance insights.
