@@ -71,11 +71,11 @@
   kubernetes.core.k8s:
     api_version: v1
     kind: Secret
-    name: "grafana-token-{{ ansible_date_time.epoch }}"
+    name: "grafana-token-{{ ansible_facts['date_time']['epoch'] }}"
     namespace: "{{ baseline_namespace }}"
     definition:
       metadata:
-        name: "grafana-token-{{ ansible_date_time.epoch }}"
+        name: "grafana-token-{{ ansible_facts['date_time']['epoch'] }}"
         namespace: "{{ baseline_namespace }}"
         annotations:
           kubernetes.io/service-account.name: "{{ monitoring.grafana.service_account }}"
