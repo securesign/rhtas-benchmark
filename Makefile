@@ -64,19 +64,20 @@ clean:
 	@echo "Cleaning up TAS resources and operators..."
 
 	@echo " Deleting Keycloak resources..."
-	oc delete keycloakrealm trusted-artifact-signer -n keycloak-system --ignore-not-found=true --wait=true --timeout=2m
-	oc delete keycloakclient trusted-artifact-signer -n keycloak-system --ignore-not-found=true --wait=true --timeout=2m
-	oc delete keycloakuser jdoe -n keycloak-system --ignore-not-found=true --wait=true --timeout=2m
+	oc delete keycloakrealmimport trusted-artifact-signer-realm -n keycloak-system --ignore-not-found=true --wait=true --timeout=2m
 	oc delete keycloak keycloak -n keycloak-system --ignore-not-found=true --wait=true --timeout=3m
+	oc delete statefulset postgresql-db -n keycloak-system --ignore-not-found=true --wait=true --timeout=2m
+	oc delete service postgresql-db -n keycloak-system --ignore-not-found=true
+	oc delete secret postgresql-db -n keycloak-system --ignore-not-found=true
 	
 	@echo " Removing application namespaces..."
 	oc delete namespace tas-monitoring --ignore-not-found=true --timeout=3m
 	oc delete namespace k6-tests --ignore-not-found=true --timeout=3m
 	oc delete namespace trusted-artifact-signer --ignore-not-found=true --timeout=3m
 
-	@echo " Removing Keycloak operator..."
-	oc delete subscription keycloak-operator -n keycloak-system --ignore-not-found=true
-	oc delete csv -n keycloak-system -l operators.coreos.com/keycloak-operator.keycloak-system --ignore-not-found=true
+	@echo " Removing RHBK operator..."
+	oc delete subscription rhbk-operator -n keycloak-system --ignore-not-found=true
+	oc delete csv -n keycloak-system -l operators.coreos.com/rhbk-operator.keycloak-system --ignore-not-found=true
 	@echo " Removing RHTAS operator..."
 	oc delete subscription rhtas-operator -n openshift-operators --ignore-not-found=true
 	oc delete csv -n openshift-operators -l operators.coreos.com/rhtas-operator.openshift-operators --ignore-not-found=true
@@ -99,19 +100,14 @@ clean:
 		timestampauthorities.rhtas.redhat.com \
 		trillians.rhtas.redhat.com \
 		tufs.rhtas.redhat.com \
-		keycloaks.keycloak.org \
-		keycloakrealms.keycloak.org \
-		keycloakclients.keycloak.org \
-		keycloakusers.keycloak.org \
-		keycloakbackups.keycloak.org
+		keycloaks.k8s.keycloak.org \
+		keycloakrealmimports.k8s.keycloak.org
 	@echo "Complete cleanup finished"
 	@$(MAKE) clean-labels
 
 force-clean:
 	@echo "Forcefully removing finalizers from Keycloak resources..."
-	oc patch keycloakrealm trusted-artifact-signer -n keycloak-system -p '{"metadata":{"finalizers":[]}}' --type=merge || true
-	oc patch keycloakclient trusted-artifact-signer -n keycloak-system -p '{"metadata":{"finalizers":[]}}' --type=merge || true
-	oc patch keycloakuser jdoe -n keycloak-system -p '{"metadata":{"finalizers":[]}}' --type=merge || true
+	oc patch keycloakrealmimport trusted-artifact-signer-realm -n keycloak-system -p '{"metadata":{"finalizers":[]}}' --type=merge || true
 	oc patch keycloak keycloak -n keycloak-system -p '{"metadata":{"finalizers":[]}}' --type=merge || true
 	@echo "Finalizers removed. Now running standard clean..."
 	$(MAKE) clean

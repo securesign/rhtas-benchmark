@@ -1,32 +1,138 @@
 ---
-- name: Build Kustomize output for Keycloak Resources
-  ansible.builtin.command: "oc kustomize {{ path_to_k8s_configs }}/keycloak/resources/overlay/kind/"
-  register: kustomize_resources_output
-  changed_when: false
-
-- name: Deploy Keycloak Resources from Kustomize output
-  kubernetes.core.k8s:
-    state: present
-    definition: "{{ kustomize_resources_output.stdout }}"
-
-- name: "Wait for Keycloak Route to become available"
+- name: "Get OpenShift cluster ingress domain"
   kubernetes.core.k8s_info:
-    api_version: route.openshift.io/v1
-    kind: Route
+    api_version: config.openshift.io/v1
+    kind: Ingress
+    name: cluster
+  register: cluster_ingress
+
+- name: "Set Keycloak hostname fact"
+  ansible.builtin.set_fact:
+    keycloak_hostname: "keycloak-keycloak-system.{{ cluster_ingress.resources[0].spec.domain }}"
+
+- name: "Check if Keycloak already exists"
+  kubernetes.core.k8s_info:
+    api_version: k8s.keycloak.org/v2alpha1
+    kind: Keycloak
     name: keycloak
     namespace: keycloak-system
-  register: keycloak_route_result
-  retries: 30
-  delay: 10
-  until: keycloak_route_result.resources | length > 0
+  register: existing_keycloak
+
+- name: "Skip deployment message"
+  ansible.builtin.debug:
+    msg: "Keycloak already exists in keycloak-system, skipping deployment."
+  when: existing_keycloak.resources | length > 0
+
+- name: "Deploy Keycloak resources"
+  when: existing_keycloak.resources | length == 0
+  block:
+    - name: "Create PostgreSQL credentials secret"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: postgresql-db
+            namespace: keycloak-system
+          stringData:
+            database: "{{ keycloak_db_name | default('keycloak') }}"
+            username: "{{ keycloak_db_user | default('keycloak') }}"
+            password: "{{ keycloak_db_password }}"
+
+    - name: "Deploy PostgreSQL for Keycloak"
+      kubernetes.core.k8s:
+        state: present
+        src: "{{ path_to_k8s_configs }}/keycloak/resources/base/postgres.yaml"
+        namespace: keycloak-system
+
+    - name: "Wait for PostgreSQL StatefulSet to be ready"
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: StatefulSet
+        name: postgresql-db
+        namespace: keycloak-system
+      register: postgres_status
+      retries: 30
+      delay: 10
+      until: >
+        postgres_status.resources | length > 0 and
+        postgres_status.resources[0].status is defined and
+        postgres_status.resources[0].status.readyReplicas is defined and
+        postgres_status.resources[0].status.readyReplicas >= 1
+
+    - name: "Deploy Keycloak instance"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: k8s.keycloak.org/v2alpha1
+          kind: Keycloak
+          metadata:
+            name: keycloak
+            namespace: keycloak-system
+          spec:
+            instances: 1
+            hostname:
+              hostname: "{{ keycloak_hostname }}"
+            ingress:
+              enabled: true
+            db:
+              vendor: postgres
+              host: postgresql-db
+              usernameSecret:
+                name: postgresql-db
+                key: username
+              passwordSecret:
+                name: postgresql-db
+                key: password
+            http:
+              httpEnabled: true
+            proxy:
+              headers: xforwarded
+
+    - name: "Wait for Keycloak to be ready"
+      kubernetes.core.k8s_info:
+        api_version: k8s.keycloak.org/v2alpha1
+        kind: Keycloak
+        name: keycloak
+        namespace: keycloak-system
+      register: keycloak_status
+      retries: 30
+      delay: 10
+      until: >
+        keycloak_status.resources | length > 0 and
+        keycloak_status.resources[0].status is defined and
+        keycloak_status.resources[0].status.conditions is defined and
+        keycloak_status.resources[0].status.conditions | selectattr('type', 'equalto', 'Ready') | selectattr('status', 'equalto', 'True') | list | length > 0
+
+    - name: "Deploy Keycloak realm import"
+      kubernetes.core.k8s:
+        state: present
+        src: "{{ path_to_k8s_configs }}/keycloak/resources/base/realm-import.yaml"
+        namespace: keycloak-system
+
+    - name: "Wait for realm import to complete"
+      kubernetes.core.k8s_info:
+        api_version: k8s.keycloak.org/v2alpha1
+        kind: KeycloakRealmImport
+        name: trusted-artifact-signer-realm
+        namespace: keycloak-system
+      register: realm_import_status
+      retries: 30
+      delay: 10
+      until: >
+        realm_import_status.resources | length > 0 and
+        realm_import_status.resources[0].status is defined and
+        realm_import_status.resources[0].status.conditions is defined and
+        realm_import_status.resources[0].status.conditions | selectattr('type', 'equalto', 'Done') | selectattr('status', 'equalto', 'True') | list | length > 0
 
 - name: Set dynamic Keycloak issuer URL as a fact
   ansible.builtin.set_fact:
-    keycloak_issuer_url_dynamic: "https://{{ keycloak_route_result.resources[0].spec.host }}/auth/realms/trusted-artifact-signer"
+    keycloak_issuer_url_dynamic: "https://{{ keycloak_hostname }}/realms/trusted-artifact-signer"
 
 - name: "Verify that the Keycloak URL was successfully discovered"
   ansible.builtin.fail:
-    msg: "Critical error: Failed to get the public URL for Keycloak from the Route object."
+    msg: "Critical error: Failed to construct the public URL for Keycloak."
   when: keycloak_issuer_url_dynamic is not defined or keycloak_issuer_url_dynamic | length == 0
 
 - name: Display the discovered URL for verification

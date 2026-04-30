@@ -263,3 +263,5 @@ pip-selfcheck.json
 .ionide
 
 # End of https://www.toptal.com/developers/gitignore/api/go,macos,visualstudiocode,ansible,python,venv
+# Local compiled Go binaries
+rhtas-benchmark

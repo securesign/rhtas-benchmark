@@ -14,9 +14,15 @@ function getOidcToken() {
     const user = __ENV.OIDC_USER;
     const password = __ENV.OIDC_PASSWORD;
     const clientID = __ENV.OIDC_CLIENT_ID;
-    if (!issuerURL || !user || !password || !clientID) return null;
+
+    if (!issuerURL || !user || !password || !clientID) {
+        console.error(`OIDC env vars missing: OIDC_ISSUER_URL=${issuerURL}, OIDC_USER=${user}, OIDC_CLIENT_ID=${clientID}`);
+        return null;
+    }
 
     const tokenURL = `${issuerURL}/protocol/openid-connect/token`;
+    console.log(`Requesting OIDC token from: ${tokenURL}`);
+
     const payload = {
         username: user,
         password: password,
@@ -26,7 +32,7 @@ function getOidcToken() {
     };
     const res = http.post(tokenURL, payload);
     if (res.status !== 200) {
-        console.error(`OIDC token request failed: ${res.status} ${res.body}`);
+        console.error(`OIDC token request failed: status=${res.status}, url=${tokenURL}, body=${res.body}`);
         return null;
     }
     return res.json("access_token");
@@ -36,8 +42,7 @@ export function setup() {
     console.log("Fetching a single OIDC token for the entire test run...");
     const authToken = getOidcToken();
     if (!authToken) {
-        console.error("Failed to retrieve OIDC token during setup. Cannot start the test.");
-        return;
+        fail("Failed to retrieve OIDC token during setup. Cannot start the test.");
     }
     console.log("OIDC Token successfully retrieved. Starting VU iterations.");
 
@@ -46,6 +51,9 @@ export function setup() {
 
 
 export default function (data) {
+    if (!data || !data.token) {
+        fail("No OIDC token available - setup() failed to retrieve a valid token.");
+    }
     const authToken = data.token;
 
     const FULCIO_URL = __ENV.FULCIO_URL + "/api/v1/signingCert";

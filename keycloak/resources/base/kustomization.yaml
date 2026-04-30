@@ -4,7 +4,5 @@ kind: Kustomization
 namespace: keycloak-system
 
 resources:
-- keycloak.yaml
-- realm.yaml
-- tas-client.yaml
-- user.yaml
+- postgres.yaml
+- realm-import.yaml

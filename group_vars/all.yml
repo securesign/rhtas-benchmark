@@ -26,6 +26,9 @@ certificates:
   tsa:
     common_name: "tsa.hostname"
 
+tuf:
+  root_key_secret_name: "tuf-root-keys"
+
 storage:
   tuf_size: "100Mi"
   trillian_database_size: "10Gi"
@@ -57,32 +60,39 @@ components:
   fulcio:
     monitoring_enabled: true
     external_access: true
+    replicas: 1
     description: "Certificate Authority - issues signing certificates"
-    
+
   rekor:
     monitoring_enabled: true
     external_access: true
     search_ui_enabled: true
     backfill_enabled: true
+    replicas: 1
     description: "Transparency Log - records all signatures"
-    
+
   trillian:
     monitoring_enabled: true
     database_create: true
+    server_replicas: 1
+    signer_replicas: 1
     description: "Backend Database - stores transparency log data"
-    
+
   ctlog:
     monitoring_enabled: true
+    replicas: 1
     description: "Certificate Transparency Log"
-    
+
   tsa:
     monitoring_enabled: true
     ntp_monitoring_enabled: true
     external_access: true
+    replicas: 1
     description: "Timestamp Authority - provides cryptographic timestamps"
-    
+
   tuf:
     external_access: true
+    replicas: 1
     description: "The Update Framework - distributes public keys"
 
 operators:

@@ -11,72 +11,105 @@
 
 
   pre_tasks:
-    - name: "Discover Fulcio URL"
+    - name: "Discover Fulcio Service"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Service
+        namespace: "{{ baseline_namespace }}"
+        label_selectors:
+          - "app.kubernetes.io/name=fulcio-server"
+      register: fulcio_svc_info
+
+    - name: "Discover Fulcio URL from CR (fallback)"
       kubernetes.core.k8s_info:
         api_version: rhtas.redhat.com/v1alpha1
         kind: Fulcio
         namespace: "{{ baseline_namespace }}"
       register: fulcio_info
       failed_when: fulcio_info.resources | length == 0
-      
-    - name: "Set Fulcio URL fact"
+      when: fulcio_svc_info.resources | length == 0
+
+    - name: "Set Fulcio URL fact (in-cluster service)"
+      ansible.builtin.set_fact:
+        dynamic_fulcio_url: "http://{{ fulcio_svc_info.resources[0].metadata.name }}.{{ baseline_namespace }}.svc.cluster.local:{{ fulcio_svc_info.resources[0].spec.ports[0].port }}"
+      when: fulcio_svc_info.resources | length > 0
+
+    - name: "Set Fulcio URL fact (external fallback)"
       ansible.builtin.set_fact:
         dynamic_fulcio_url: "{{ fulcio_info.resources[0].status.url }}"
-      when: fulcio_info.resources | length > 0
+      when: fulcio_svc_info.resources | length == 0
 
-    - name: "Discover Rekor URL"
+    - name: "Discover Rekor Service"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Service
+        namespace: "{{ baseline_namespace }}"
+        label_selectors:
+          - "app.kubernetes.io/name=rekor-server"
+      register: rekor_svc_info
+
+    - name: "Discover Rekor URL from CR (fallback)"
       kubernetes.core.k8s_info:
         api_version: rhtas.redhat.com/v1alpha1
         kind: Rekor
         namespace: "{{ baseline_namespace }}"
       register: rekor_info
       failed_when: rekor_info.resources | length == 0
-      
-    - name: "Set Rekor URL fact"
+      when: rekor_svc_info.resources | length == 0
+
+    - name: "Set Rekor URL fact (in-cluster service)"
+      ansible.builtin.set_fact:
+        dynamic_rekor_url: "http://{{ rekor_svc_info.resources[0].metadata.name }}.{{ baseline_namespace }}.svc.cluster.local:{{ rekor_svc_info.resources[0].spec.ports[0].port }}"
+      when: rekor_svc_info.resources | length > 0
+
+    - name: "Set Rekor URL fact (external fallback)"
       ansible.builtin.set_fact:
         dynamic_rekor_url: "{{ rekor_info.resources[0].status.url }}"
-      when: rekor_info.resources | length > 0
+      when: rekor_svc_info.resources | length == 0
 
-    - name: "Discover Keycloak (OIDC) Route"
+    - name: "Get OpenShift cluster ingress domain"
       kubernetes.core.k8s_info:
-        api_version: route.openshift.io/v1
-        kind: Route
-        name: "keycloak"
-        namespace: "keycloak-system"
-      register: keycloak_route_info
-      failed_when: keycloak_route_info.resources | length == 0
-      
+        api_version: config.openshift.io/v1
+        kind: Ingress
+        name: cluster
+      register: cluster_ingress_info
+      failed_when: cluster_ingress_info.resources | length == 0
+
     - name: "Set OIDC Issuer URL fact"
       ansible.builtin.set_fact:
-        dynamic_oidc_issuer_url: "https://{{ keycloak_route_info.resources[0].spec.host }}/auth/realms/trusted-artifact-signer"
-      when: keycloak_route_info.resources | length > 0
+        dynamic_oidc_issuer_url: "https://keycloak-keycloak-system.{{ cluster_ingress_info.resources[0].spec.domain }}/realms/trusted-artifact-signer"
 
-    - name: "Discover Timestamp Authority (TSA) URL"
+    - name: "Discover TSA Service"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Service
+        namespace: "{{ baseline_namespace }}"
+        label_selectors:
+          - "app.kubernetes.io/name=tsa-server"
+      register: tsa_svc_info
+
+    - name: "Discover TSA URL from CR (fallback)"
       kubernetes.core.k8s_info:
         api_version: rhtas.redhat.com/v1alpha1
         kind: TimestampAuthority
         namespace: "{{ baseline_namespace }}"
       register: tsa_info
       failed_when: tsa_info.resources | length == 0
-      
-    - name: "Set TSA URL fact"
+      when: tsa_svc_info.resources | length == 0
+
+    - name: "Set TSA URL fact (in-cluster service)"
+      ansible.builtin.set_fact:
+        dynamic_tsa_url: "http://{{ tsa_svc_info.resources[0].metadata.name }}.{{ baseline_namespace }}.svc.cluster.local:{{ tsa_svc_info.resources[0].spec.ports[0].port }}"
+      when: tsa_svc_info.resources | length > 0
+
+    - name: "Set TSA URL fact (external fallback)"
       ansible.builtin.set_fact:
         dynamic_tsa_url: "{{ tsa_info.resources[0].status.url }}"
-      when: tsa_info.resources | length > 0
+      when: tsa_svc_info.resources | length == 0
 
-    - name: "Discover Pushgateway Route"
-      kubernetes.core.k8s_info:
-        api_version: route.openshift.io/v1
-        kind: Route
-        name: "pushgateway"
-        namespace: "{{ baseline_namespace }}"
-      register: pushgateway_route_info
-      failed_when: pushgateway_route_info.resources | length == 0
-      
-    - name: "Set Pushgateway URL fact"
+    - name: "Set Pushgateway URL fact (in-cluster service)"
       ansible.builtin.set_fact:
-        dynamic_pushgateway_url: "https://{{ pushgateway_route_info.resources[0].spec.host }}"
-      when: pushgateway_route_info.resources | length > 0
+        dynamic_pushgateway_url: "http://pushgateway.{{ baseline_namespace }}.svc.cluster.local:9091"
 
     - name: "Display discovered URLs for verification"
       ansible.builtin.debug:
@@ -108,6 +141,19 @@
       when: rekor_uuids is defined and rekor_uuids != ""
 
   tasks:
+    - name: "Update ConfigMap with latest K6 scripts"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: "k6-test-script"
+            namespace: "{{ k6_test_namespace }}"
+          data:
+            tas-perf-sign-template.js: "{{ lookup('file', k6_sign_script_path) }}"
+            tas-perf-verify-template.js: "{{ lookup('file', k6_verify_script_path) }}"
+
     - name: "Run and Monitor K6 Test"
       block:
         - name: "Run the K6 Job"

@@ -16,10 +16,13 @@ spec:
       
       containers:
       - name: go-crypto-helper
-        image: "quay.io/rh_ee_kdacosta/go-crypto-helper:go_error_counter-2"
+        image: "quay.io/rh_ee_kdacosta/go-crypto-helper:latest"
+        imagePullPolicy: Always
         ports:
         - containerPort: 8080
         env:
+        - name: INSECURE_SKIP_TLS_VERIFY
+          value: "{{ insecure_skip_tls | default('false') }}"
         - name: TSA_URL
           value: "{{ dynamic_tsa_url }}/api/v1/timestamp"
         - name: K6_PUSHGATEWAY_URL
@@ -35,6 +38,8 @@ spec:
         - "sleep 5; k6 run /test/{{ k6_script_to_run }} --out output-prometheus-pushgateway {{ k6_args }}"
         
         env:
+        - name: K6_INSECURE_SKIP_TLS_VERIFY
+          value: "{{ insecure_skip_tls | default('false') }}"
         - name: K6_PUSHGATEWAY_URL
           value: "{{ dynamic_pushgateway_url }}"
         - name: K6_JOB_NAME

@@ -11,7 +11,7 @@
       - "Instance: {{ baseline.instance_name }}"
       - "Namespace: {{ baseline_namespace }}"
 
-- name: "Check all TAS components for readiness"
+- name: "Wait for core TAS components to be ready"
   kubernetes.core.k8s_info:
     api_version: rhtas.redhat.com/v1alpha1
     kind: "{{ item }}"
@@ -31,10 +31,45 @@
     - Rekor
     - CTlog
     - TimestampAuthority
-    - Tuf
-    - Securesign
   loop_control:
     label: "Waiting for {{ item }}"
+
+# TUF collects signing keys from all other components after they become Ready.
+# The key material (Secrets/ConfigMaps) can take additional time to be fully
+# persisted even after the CR reports Ready=True — give it a short buffer.
+- name: "Wait for component key material to be fully persisted before TUF init"
+  ansible.builtin.pause:
+    seconds: 30
+
+- name: "Wait for TUF to be ready (longer timeout — depends on all other component keys)"
+  kubernetes.core.k8s_info:
+    api_version: rhtas.redhat.com/v1alpha1
+    kind: Tuf
+    name: "{{ baseline.instance_name }}"
+    namespace: "{{ baseline_namespace }}"
+  register: tuf_status
+  retries: 60
+  delay: 15
+  until: >
+    tuf_status.resources | length > 0 and
+    (tuf_status.resources[0].status.conditions |
+     selectattr('type', 'equalto', 'Ready') |
+     selectattr('status', 'equalto', 'True') | list | length > 0)
+
+- name: "Wait for Securesign top-level CR to be ready"
+  kubernetes.core.k8s_info:
+    api_version: rhtas.redhat.com/v1alpha1
+    kind: Securesign
+    name: "{{ baseline.instance_name }}"
+    namespace: "{{ baseline_namespace }}"
+  register: securesign_status
+  retries: 20
+  delay: 15
+  until: >
+    securesign_status.resources | length > 0 and
+    (securesign_status.resources[0].status.conditions |
+     selectattr('type', 'equalto', 'Ready') |
+     selectattr('status', 'equalto', 'True') | list | length > 0)
 
 
 - name: "Apply resource requests to the Trillian DB Deployment"

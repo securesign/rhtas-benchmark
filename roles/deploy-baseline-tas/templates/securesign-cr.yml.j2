@@ -13,7 +13,7 @@ spec:
   ctlog:
     monitoring:
       enabled: {{ components.ctlog.monitoring_enabled }}
-    replicas: 1
+    replicas: {{ components.ctlog.replicas | default(1) }}
 
   fulcio:
     externalAccess:
@@ -30,14 +30,14 @@ spec:
       commonName: "{{ certificates.fulcio.common_name }}"
       organizationEmail: "{{ certificates.organization_email }}"
       organizationName: "{{ certificates.organization_name }}"
-    replicas: 1
+    replicas: {{ components.fulcio.replicas | default(1) }}
 
   rekor:
     externalAccess:
       enabled: {{ components.rekor.external_access }}
     monitoring:
       enabled: {{ components.rekor.monitoring_enabled }}
-    replicas: 1
+    replicas: {{ components.rekor.replicas | default(1) }}
 
   trillian:
     monitoring:
@@ -50,10 +50,10 @@ spec:
         retain: true
         size: {{ storage.trillian_database_size }}
     server:
-      replicas: 1
+      replicas: {{ components.trillian.server_replicas | default(1) }}
 
     signer:
-      replicas: 1
+      replicas: {{ components.trillian.signer_replicas | default(1) }}
 
   tsa:
     externalAccess:
@@ -76,7 +76,7 @@ spec:
           commonName: "{{ certificates.tsa.common_name }}"
           organizationEmail: "{{ certificates.organization_email }}"
           organizationName: "{{ certificates.organization_name }}"
-    replicas: 1
+    replicas: {{ components.tsa.replicas | default(1) }}
 
   tuf:
     externalAccess:
@@ -93,4 +93,4 @@ spec:
       size: "{{ storage.tuf_size }}"
     rootKeySecretRef:
       name: "{{ tuf.root_key_secret_name | default('tuf-root-keys') }}"
-    replicas: 1
+    replicas: {{ components.tuf.replicas | default(1) }}

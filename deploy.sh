@@ -10,6 +10,13 @@ VENV_DIR="${SCRIPT_DIR}/ansible_venv"
 DEPLOY_TYPE=${1:-baseline}
 ANSIBLE_EXTRA_VARS=""
 
+# Keycloak DB password — required, no default.
+# Override via environment variable: KEYCLOAK_DB_PASSWORD=mypassword make deploy
+KEYCLOAK_DB_PASSWORD="${KEYCLOAK_DB_PASSWORD:-keycloak}"
+
+# TLS verification — set INSECURE_SKIP_TLS=true for clusters with self-signed certs.
+INSECURE_SKIP_TLS="${INSECURE_SKIP_TLS:-false}"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -59,6 +66,8 @@ echo ""
 echo -e "${BLUE}Starting ${DEPLOY_TYPE} infrastructure deployment...${NC}"
 "${VENV_DIR}/bin/ansible-playbook" -i inventory.yml setup-baseline.yml \
     -e baseline_namespace="$BASELINE_NAMESPACE" \
+    -e keycloak_db_password="$KEYCLOAK_DB_PASSWORD" \
+    -e insecure_skip_tls="$INSECURE_SKIP_TLS" \
     $ANSIBLE_EXTRA_VARS
     
 # Final status

@@ -6,33 +6,42 @@
       - node-role.kubernetes.io/worker=
   register: worker_nodes
 
-- name: "Check if at least 2 worker nodes are available"
-  ansible.builtin.fail:
-    msg: "ERROR: At least 2 worker nodes are required for performance zone labeling, but found {{ worker_nodes.resources | length }}."
-  when: worker_nodes.resources | length < 2
+- name: "Set fact for sufficient worker nodes"
+  ansible.builtin.set_fact:
+    sufficient_workers: "{{ worker_nodes.resources | length >= 2 }}"
+
+- name: "Warn if fewer than 2 worker nodes are available"
+  ansible.builtin.debug:
+    msg: "WARNING: At least 2 worker nodes are required for performance zone labeling, but found {{ worker_nodes.resources | length }}. Skipping node labeling."
+  when: not sufficient_workers
 
 - name: "Set facts for the first two worker nodes"
   ansible.builtin.set_fact:
     database_node_name: "{{ worker_nodes.resources[0].metadata.name }}"
     application_node_name: "{{ worker_nodes.resources[1].metadata.name }}"
+  when: sufficient_workers
 
 - name: "Check if the first node is already labeled for 'database'"
   kubernetes.core.k8s_info:
     kind: Node
     name: "{{ database_node_name }}"
   register: db_node_check
+  when: sufficient_workers
 - name: "Set fact if database node needs labeling"
   ansible.builtin.set_fact:
     label_db_node: "{{ 'performance-zone' not in db_node_check.resources[0].metadata.labels or db_node_check.resources[0].metadata.labels['performance-zone'] != 'database' }}"
+  when: sufficient_workers
 
 - name: "Check if the second node is already labeled for 'application'"
   kubernetes.core.k8s_info:
     kind: Node
     name: "{{ application_node_name }}"
   register: app_node_check
+  when: sufficient_workers
 - name: "Set fact if application node needs labeling"
   ansible.builtin.set_fact:
     label_app_node: "{{ 'performance-zone' not in app_node_check.resources[0].metadata.labels or app_node_check.resources[0].metadata.labels['performance-zone'] != 'application' }}"
+  when: sufficient_workers
 
 - name: "Apply 'database' label to the first worker node if needed"
   kubernetes.core.k8s:
@@ -44,7 +53,7 @@
         name: "{{ database_node_name }}"
         labels:
           performance-zone: database
-  when: label_db_node
+  when: sufficient_workers and (label_db_node | default(false))
 
 - name: "Apply 'application' label to the second worker node if needed"
   kubernetes.core.k8s:
@@ -56,7 +65,7 @@
         name: "{{ application_node_name }}"
         labels:
           performance-zone: application
-  when: label_app_node
+  when: sufficient_workers and (label_app_node | default(false))
 
 - name: "Refresh node information after applying labels"
   kubernetes.core.k8s_info:
@@ -64,10 +73,12 @@
     label_selectors:
       - node-role.kubernetes.io/worker=
   register: updated_worker_nodes
+  when: sufficient_workers
 
 - name: "Display final node labels for verification"
   ansible.builtin.debug:
     msg: "Node '{{ item.metadata.name }}' -> performance-zone: {{ item.metadata.labels['performance-zone'] | default('not set') }}"
-  loop: "{{ updated_worker_nodes.resources }}"
+  loop: "{{ updated_worker_nodes.resources | default([]) }}"
   loop_control:
     label: "{{ item.metadata.name }}"
+  when: sufficient_workers and (updated_worker_nodes.resources | default([]) | length > 0)

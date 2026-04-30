@@ -5,6 +5,3 @@ namespace: keycloak-system
 
 resources:
   - ../../base
-
-patches:
-- path: realm_patch.yaml
