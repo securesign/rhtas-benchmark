@@ -1,9 +1,10 @@
 # TAS Baseline Infrastructure Makefile
 
-SIGN_JOB_NAME   := signing
-VERIFY_JOB_NAME := verifying
-SIGN_SCRIPT     := tas-perf-sign-template.js
-VERIFY_SCRIPT   := tas-perf-verify-template.js
+SIGN_JOB_NAME       := signing
+VERIFY_JOB_NAME     := verifying
+SIGN_SCRIPT         := tas-perf-sign-template.js
+VERIFY_SCRIPT       := tas-perf-verify-template.js
+INSECURE_SKIP_TLS   ?= false
 
 
 .PHONY: help deploy deploy-baseline deploy-optimized clean clean-apps force-clean clean-labels check status \
@@ -145,32 +146,37 @@ sign-smoke:
 	@./run-test.sh \
 		-e "k6_args='--vus 1 --iterations 1'" \
 		-e "k6_job_name=$(SIGN_JOB_NAME)" \
-		-e "k6_script_to_run=$(SIGN_SCRIPT)"
+		-e "k6_script_to_run=$(SIGN_SCRIPT)" \
+		-e "insecure_skip_tls=$(INSECURE_SKIP_TLS)"
 
 sign-fill:
 	@./run-test.sh \
 		-e "k6_args='--iterations 10000 --vus 50'" \
 		-e "k6_job_name=$(SIGN_JOB_NAME)" \
-		-e "k6_script_to_run=$(SIGN_SCRIPT)"
+		-e "k6_script_to_run=$(SIGN_SCRIPT)" \
+		-e "insecure_skip_tls=$(INSECURE_SKIP_TLS)"
 
 sign-load:
 	@./run-test.sh \
 		-e "k6_args='--stage 30s:20 --stage 5m:20 --stage 30s:0'" \
 		-e "k6_job_name=$(SIGN_JOB_NAME)" \
-		-e "k6_script_to_run=$(SIGN_SCRIPT)"
+		-e "k6_script_to_run=$(SIGN_SCRIPT)" \
+		-e "insecure_skip_tls=$(INSECURE_SKIP_TLS)"
 
 sign-stress:
 	@./run-test.sh \
 		-e "k6_args='--stage 5m:300'" \
 		-e "k6_job_name=$(SIGN_JOB_NAME)" \
-		-e "k6_script_to_run=$(SIGN_SCRIPT)"
+		-e "k6_script_to_run=$(SIGN_SCRIPT)" \
+		-e "insecure_skip_tls=$(INSECURE_SKIP_TLS)"
 
 sign-optimal-range:
 	@echo "INFO: Running a focused test on the optimal 100 VU range..."
 	@./run-test.sh \
 		-e "k6_args='--stage 30s:100 --stage 5m:100 --stage 30s:0'" \
 		-e "k6_job_name=$(SIGN_JOB_NAME)" \
-		-e "k6_script_to_run=$(SIGN_SCRIPT)"
+		-e "k6_script_to_run=$(SIGN_SCRIPT)" \
+		-e "insecure_skip_tls=$(INSECURE_SKIP_TLS)"
 
 generate-verify-data:
 	@echo "INFO: Running sign-smoke in data generation mode..."
@@ -179,6 +185,7 @@ generate-verify-data:
 		-e "k6_job_name=$(SIGN_JOB_NAME)" \
 		-e "k6_script_to_run=$(SIGN_SCRIPT)" \
 		-e "generate_data_mode=true" \
+		-e "insecure_skip_tls=$(INSECURE_SKIP_TLS)" \
 	); \
 	echo "Full log output:"; \
 	echo "$$OUTPUT"; \
@@ -195,7 +202,8 @@ verify-smoke:
 		-e "k6_args='--vus 1 --iterations 1'" \
 		-e "k6_job_name=$(VERIFY_JOB_NAME)" \
 		-e "k6_script_to_run=$(VERIFY_SCRIPT)" \
-		-e "rekor_uuids=$(UUID)"
+		-e "rekor_uuids=$(UUID)" \
+		-e "insecure_skip_tls=$(INSECURE_SKIP_TLS)"
 
 verify-load:
 	@echo "INFO: Running verify-load test..."
@@ -203,7 +211,8 @@ verify-load:
 		-e "k6_args='--stage 30s:80 --stage 5m:80 --stage 30s:0'" \
 		-e "k6_job_name=$(VERIFY_JOB_NAME)" \
 		-e "k6_script_to_run=$(VERIFY_SCRIPT)" \
-		-e "rekor_uuids=$(UUID)"
+		-e "rekor_uuids=$(UUID)" \
+		-e "insecure_skip_tls=$(INSECURE_SKIP_TLS)"
 
 verify-stress:
 	@echo "INFO: Running verify-stress test..."
@@ -211,7 +220,8 @@ verify-stress:
 		-e "k6_args='--stage 5m:300'" \
 		-e "k6_job_name=$(VERIFY_JOB_NAME)" \
 		-e "k6_script_to_run=$(VERIFY_SCRIPT)" \
-		-e "rekor_uuids=$(UUID)"
+		-e "rekor_uuids=$(UUID)" \
+		-e "insecure_skip_tls=$(INSECURE_SKIP_TLS)"
 
 verify-optimal-range:
 	@echo "INFO: Running a focused test on the optimal VU range..."
@@ -219,6 +229,7 @@ verify-optimal-range:
 		-e "k6_args='--stage 30s:100 --stage 5m:100 --stage 30s:0'" \
 		-e "k6_job_name=$(VERIFY_JOB_NAME)" \
 		-e "k6_script_to_run=$(VERIFY_SCRIPT)" \
-		-e "rekor_uuids=$(UUID)"
+		-e "rekor_uuids=$(UUID)" \
+		-e "insecure_skip_tls=$(INSECURE_SKIP_TLS)"
 
 

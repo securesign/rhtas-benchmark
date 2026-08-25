@@ -60,6 +60,23 @@ make clean
 - `make verify-optimal-range` - Production load test with 100 VUs (requires `UUID=<uuid>`)
 - `make verify-stress` - High-load stress test (requires `UUID=<uuid>`)
 
+### TLS Verification
+
+On clusters with self-signed or internal CA certificates (common with OpenShift ingress), K6 tests may fail with `x509: certificate signed by unknown authority` when connecting to the Keycloak OIDC endpoint. To skip TLS verification:
+
+```bash
+INSECURE_SKIP_TLS=true make sign-smoke
+```
+
+Or export it for the entire session:
+
+```bash
+export INSECURE_SKIP_TLS=true
+make sign-smoke
+make generate-verify-data
+UUID=<uuid> make verify-smoke
+```
+
 ## Configuration
 
 ### Default Test Credentials
